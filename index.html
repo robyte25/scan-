@@ -21,7 +21,6 @@
       --app-width: 480px;
     }
 
-    /* THEMES */
     [data-theme="berry"] { --primary: #db2777; --bg: #fff1f2; --card: #ffffff; --text: #831843; --border: #fecdd3; }
     [data-theme="nature"] { --primary: #059669; --bg: #f0fdf4; --card: #ffffff; --text: #064e3b; --border: #bcf0da; }
     [data-theme="ocean"] { --primary: #0891b2; --bg: #ecfeff; --card: #ffffff; --text: #164e63; --border: #a5f3fc; }
@@ -138,9 +137,7 @@
       </div>
       
       <button id="cloud-sync-btn" class="btn" style="background:#4285F4; display:none; margin-bottom:15px;" onclick="syncWithCloud()">☁️ Daten mit der Cloud synchronisieren</button>
-      
       <button class="btn" style="background:#f43f5e; margin-bottom:15px;" onclick="exportPDF()">📄 PDF Report erstellen</button>
-
       <button class="btn ai" onclick="runAiAnalyse()">✨ KI Spar-Analyse & Preis-Check</button>
       <div id="ai-output"></div>
       <div id="main-list" style="margin-top:20px;"></div>
@@ -179,7 +176,7 @@ const DB_KEY = "receipts_v12_final";
 const CLIENT_ID = '874809033702-5n2klkcs50hs8ugamgqvq8irfjfare3g.apps.googleusercontent.com';
 let currentCat = "ALL";
 let currentShop = "ALL";
-let myChart = null; // Für das Donut Chart
+let myChart = null;
 
 function changeTheme(theme) {
   document.body.setAttribute('data-theme', theme);
@@ -284,18 +281,19 @@ function setShop(shop, el) {
 
 function render() {
   const db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-  
   const markets = [...new Set(db.map(r => r.shop))].filter(s => s && s !== "Scan unklar");
   const mDiv = document.getElementById('market-chips');
-  mDiv.innerHTML = `<div class="chip ${currentShop === 'ALL' ? 'active' : ''}" onclick="setShop('ALL', this)">Alle</div>` + 
-    markets.map(m => `<div class="chip ${currentShop === m ? 'active' : ''}" onclick="setShop('${m}', this)">${m}</div>`).join('');
+  if(mDiv) {
+    mDiv.innerHTML = `<div class="chip ${currentShop === 'ALL' ? 'active' : ''}" onclick="setShop('ALL', this)">Alle</div>` + 
+      markets.map(m => `<div class="chip ${currentShop === m ? 'active' : ''}" onclick="setShop('${m}', this)">${m}</div>`).join('');
+  }
 
   const dFrom = document.getElementById('dateFrom').value;
   const dTo = document.getElementById('dateTo').value;
   
   const filtered = db.filter(r => {
     const dateMatch = (!dFrom || r.date >= dFrom) && (!dTo || r.date <= dTo);
-    const catMatch = currentCat === "ALL" || r.items.some(i => i.c === currentCat);
+    const catMatch = currentCat === "ALL" || (r.items && r.items.some(i => i.c === currentCat));
     const shopMatch = currentShop === "ALL" || r.shop === currentShop;
     return dateMatch && catMatch && shopMatch;
   });
@@ -311,39 +309,38 @@ function render() {
     bArea.innerHTML = `<div class="card"><b>Budget:</b> ${sum.toFixed(2)}€ / ${budget}€<div class="progress-bg"><div class="progress-fill" style="width:${perc}%; background:${perc > 90 ? 'var(--danger)' : 'var(--success)'}"></div></div></div>`;
   } else { bArea.innerHTML = ""; }
 
-  // Update Donut Chart
   updateChart(filtered);
 
-  document.getElementById('main-list').innerHTML = filtered.slice().reverse().map(r => `
-    <div class="receipt-item">
-      <div style="display:flex; justify-content:space-between; align-items:center;" onclick="this.nextElementSibling.classList.toggle('open')">
-        <span><b>${r.shop}</b><br><small>${r.date}</small></span>
-        <b style="color:var(--primary)">${(r.total || 0).toFixed(2)}€</b>
+  const listEl = document.getElementById('main-list');
+  if(filtered.length === 0) {
+    listEl.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">Keine Bons gefunden.</div>`;
+  } else {
+    listEl.innerHTML = filtered.slice().reverse().map(r => `
+      <div class="receipt-item">
+        <div style="display:flex; justify-content:space-between; align-items:center;" onclick="this.nextElementSibling.classList.toggle('open')">
+          <span><b>${r.shop}</b><br><small>${r.date}</small></span>
+          <b style="color:var(--primary)">${(r.total || 0).toFixed(2)}€</b>
+        </div>
+        <div class="details">
+          ${(r.items || []).map(i => `
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:0.9rem;">
+              <span>${i.n} <span class="cat-badge">${i.c}</span></span>
+              <span style="font-weight:600;">${(i.p || 0).toFixed(2)}€</span>
+            </div>
+          `).join('')}
+          <button onclick="deleteItem(${r.id})" style="color:var(--danger); background:none; border:none; margin-top:15px; cursor:pointer; width:100%; text-align:right; font-size:0.8rem; font-weight:700;">LÖSCHEN</button>
+        </div>
       </div>
-      <div class="details">
-        ${(r.items || []).map(i => `
-          <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:0.9rem;">
-            <span>${i.n} <span class="cat-badge">${i.c}</span></span>
-            <span style="font-weight:600;">${(i.p || 0).toFixed(2)}€</span>
-          </div>
-        `).join('')}
-        <button onclick="deleteItem(${r.id})" style="color:var(--danger); background:none; border:none; margin-top:15px; cursor:pointer; width:100%; text-align:right; font-size:0.8rem; font-weight:700;">LÖSCHEN</button>
-      </div>
-    </div>
-  `).join('');
+    `).join('');
+  }
 }
 
-// NEUE FUNKTION: Chart Update
 function updateChart(data) {
   const chartCard = document.getElementById('chart-card');
   if(!data.length) { chartCard.style.display="none"; return; }
   chartCard.style.display="block";
-
   const cats = {};
-  data.forEach(r => r.items.forEach(i => {
-    cats[i.c] = (cats[i.c] || 0) + i.p;
-  }));
-
+  data.forEach(r => r.items.forEach(i => { cats[i.c] = (cats[i.c] || 0) + i.p; }));
   const ctx = document.getElementById('categoryChart').getContext('2d');
   if(myChart) myChart.destroy();
   myChart = new Chart(ctx, {
@@ -360,58 +357,32 @@ function updateChart(data) {
   });
 }
 
-// NEUE FUNKTION: PDF Export
 async function exportPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
-  
   doc.setFontSize(20);
   doc.text("Kassenbon Pro - Report", 14, 22);
-  doc.setFontSize(11);
-  doc.text(`Erstellt am: ${new Date().toLocaleDateString()}`, 14, 30);
-
   const tableData = [];
-  db.forEach(r => {
-    r.items.forEach(i => {
-      tableData.push([r.date, r.shop, i.n, i.c, i.p.toFixed(2) + " €"]);
-    });
-  });
-
-  doc.autoTable({
-    startY: 40,
-    head: [['Datum', 'Laden', 'Produkt', 'Kategorie', 'Preis']],
-    body: tableData,
-    theme: 'striped'
-  });
-
-  doc.save(`Kassenbon_Report_${Date.now()}.pdf`);
+  db.forEach(r => { r.items.forEach(i => { tableData.push([r.date, r.shop, i.n, i.c, i.p.toFixed(2) + " €"]); }); });
+  doc.autoTable({ startY: 40, head: [['Datum', 'Laden', 'Produkt', 'Kategorie', 'Preis']], body: tableData });
+  doc.save(`Kassenbon_Report.pdf`);
 }
 
-// ERWEITERTE FUNKTION: KI Analyse mit internem Preisvergleich
 async function runAiAnalyse() {
   const db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
   if(!db.length) return;
   document.getElementById('ai-output').innerHTML = "<div class='card'>KI analysiert Preise...</div>";
-  
-  // Interner Preis-Check Logik
   const priceCheck = {};
-  db.forEach(r => {
-    r.items.forEach(i => {
-      const name = i.n.toLowerCase();
-      if(!priceCheck[name] || i.p < priceCheck[name].p) {
-        priceCheck[name] = { p: i.p, s: r.shop };
-      }
-    });
-  });
-
+  db.forEach(r => { r.items.forEach(i => {
+    const name = i.n.toLowerCase();
+    if(!priceCheck[name] || i.p < priceCheck[name].p) priceCheck[name] = { p: i.p, s: r.shop };
+  }); });
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST", headers: {"Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json"},
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
-      messages: [{role: "user", content: `Analysiere diese Käufe: ${JSON.stringify(db.slice(-5))}. 
-      Zusätzlich hier die Bestpreise aus meiner Historie: ${JSON.stringify(priceCheck)}. 
-      Gib 2 kurze Tipps und weise mich auf ein Produkt hin, das ich schonmal günstiger bei einem anderen Laden gekauft habe.`}]
+      messages: [{role: "user", content: `Analysiere Käufe: ${JSON.stringify(db.slice(-5))}. Bestpreise: ${JSON.stringify(priceCheck)}. Gib 2 Tipps.`}]
     })
   });
   const data = await res.json();
@@ -424,51 +395,31 @@ async function syncWithCloud() {
   const statusEl = document.getElementById('sync-status');
   const btn = document.getElementById('cloud-sync-btn');
   const originalBtnText = btn.textContent;
-  
   try {
-    btn.textContent = "⏳ Synchronisiere...";
-    statusEl.textContent = "⏳ Sync läuft...";
-    
-    const searchRes = await fetch("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='receipts.json'", {
-      headers: { "Authorization": `Bearer ${token}` }
-    });
+    btn.textContent = "⏳..."; statusEl.textContent = "⏳ Verbindung...";
+    const searchRes = await fetch("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='receipts.json'", { headers: { "Authorization": `Bearer ${token}` } });
     const searchData = await searchRes.json();
-    const fileId = searchData.files.length > 0 ? searchData.files[0].id : null;
+    if (!searchData || searchData.error) throw new Error("API Fehler");
+    const fileId = (searchData.files && searchData.files.length > 0) ? searchData.files[0].id : null;
     const localData = localStorage.getItem(DB_KEY) || "[]";
-
     if (fileId) {
-      const downloadRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-        headers: { "Authorization": `Bearer ${token}` }
-      });
-      const cloudData = await downloadRes.json();
+      const downloadRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { "Authorization": `Bearer ${token}` } });
+      let cloudData = await downloadRes.json();
       const localParsed = JSON.parse(localData);
       const merged = [...cloudData];
-      localParsed.forEach(lItem => {
-        if(!merged.find(mItem => mItem.id === lItem.id)) merged.push(lItem);
-      });
+      localParsed.forEach(lItem => { if(!merged.find(mItem => mItem.id === lItem.id)) merged.push(lItem); });
       localStorage.setItem(DB_KEY, JSON.stringify(merged));
-      await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
-        method: "PATCH",
-        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(merged)
-      });
+      await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, { method: "PATCH", headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(merged) });
     } else {
       const metadata = { name: 'receipts.json', parents: ['appDataFolder'] };
       const form = new FormData();
       form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
       form.append('file', new Blob([localData], { type: 'application/json' }));
-      await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
-        method: "POST", headers: { "Authorization": `Bearer ${token}` }, body: form
-      });
+      await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", { method: "POST", headers: { "Authorization": `Bearer ${token}` }, body: form });
     }
-    statusEl.textContent = "✅ Sync Abgeschlossen";
-    render();
-  } catch (e) {
-    statusEl.textContent = "❌ Sync Fehler";
-  } finally {
-    btn.textContent = originalBtnText;
-    setTimeout(() => { statusEl.textContent = "✅ Cloud Aktiv"; }, 3000);
-  }
+    statusEl.textContent = "✅ Sync Fertig"; render();
+  } catch (e) { statusEl.textContent = "❌ Fehler"; }
+  finally { btn.textContent = originalBtnText; setTimeout(() => { if(localStorage.getItem('google_token')) statusEl.textContent = "✅ Cloud Aktiv"; }, 3000); }
 }
 
 function saveBudget(v) { localStorage.setItem('app_budget', v); render(); }

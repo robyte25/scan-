@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Kassenbon Pro – Professional Version</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://apis.google.com/js/api.js" async defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+
+  <style>
+    :root {
+      --font-main: 'Inter', sans-serif;
+      --primary: #2563eb; --bg: #f3f4f6; --card: #ffffff;
+      --text: #111827; --text-muted: #6b7280; --border: #e5e7eb; --danger: #dc2626; --success: #10b981; --radius: 12px;
+      --app-width: 480px;
+    }
+
+    /* THEMES */
+    [data-theme="berry"] { --primary: #db2777; --bg: #fff1f2; --card: #ffffff; --text: #831843; --border: #fecdd3; }
+    [data-theme="nature"] { --primary: #059669; --bg: #f0fdf4; --card: #ffffff; --text: #064e3b; --border: #bcf0da; }
+    [data-theme="ocean"] { --primary: #0891b2; --bg: #ecfeff; --card: #ffffff; --text: #164e63; --border: #a5f3fc; }
+    [data-theme="dark"] { --primary: #60a5fa; --bg: #111827; --card: #1f2937; --text: #f9fafb; --border: #374151; }
+
+    @media (min-width: 768px) {
+      :root { --app-width: 850px; }
+      .stats-grid-desktop { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    }
+
+    * { -webkit-tap-highlight-color: transparent; outline: none; box-sizing: border-box; }
+    body { margin: 0; font-family: var(--font-main); background: var(--bg); color: var(--text); transition: background 0.3s; }
+    .app { max-width: var(--app-width); margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+    header { padding: 16px; background: var(--card); border-bottom: 1px solid var(--border); text-align: center; position: sticky; top: 0; z-index: 100; }
+    .tabs { display: flex; margin: 12px auto 0; background: var(--bg); border-radius: 999px; padding: 4px; max-width: 500px; }
+    .tab { flex: 1; padding: 10px; font-size: 0.85rem; border-radius: 999px; cursor: pointer; color: var(--text-muted); text-align: center; transition: all 0.2s; }
+    .tab.active { background: var(--primary); color: #fff; font-weight: 700; }
+
+    main { flex: 1; padding: 20px; padding-bottom: 80px; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .card { background: var(--card); border-radius: var(--radius); padding: 20px; margin-bottom: 15px; border: 1px solid var(--border); }
+
+    .btn { 
+      width: 100%; padding: 14px; border-radius: var(--radius); border: none; 
+      background: var(--primary); color: #fff; font-weight: 700; cursor: pointer; 
+      margin-top: 10px; transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn:active { transform: scale(0.96); filter: brightness(1.1); }
+    .btn.ai { background: linear-gradient(135deg, var(--primary), #a855f7); }
+
+    .file-label { display: block; padding: 50px; border: 3px dashed var(--primary); border-radius: var(--radius); text-align: center; color: var(--primary); font-weight: 800; cursor: pointer; background: var(--card); }
+    .progress-bg { background: var(--border); height: 12px; border-radius: 6px; overflow: hidden; margin-top: 15px; }
+    .progress-fill { background: var(--success); height: 100%; width: 0%; transition: width 0.3s; }
+
+    .receipt-item { padding: 15px; border-bottom: 1px solid var(--border); background: var(--card); margin-bottom: 8px; border-radius: var(--radius); cursor: pointer; }
+    .details { display: none; padding-top: 10px; margin-top: 10px; border-top: 1px dashed var(--border); }
+    .details.open { display: block; }
+    
+    .category-chips { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; scrollbar-width: none; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+    .chip { flex-shrink: 0; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--border); font-size: 0.8rem; background: var(--card); cursor: pointer; margin-bottom: 10px; }
+    .chip.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+    select, input[type="number"], input[type="date"] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); margin-top: 8px; }
+    #sync-status { font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase; margin-top: 5px; }
+    
+    .filter-label { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 5px; display: block; }
+    .cat-badge { color: var(--primary); background: var(--bg); padding: 2px 6px; border-radius: 4px; margin-left: 5px; font-size: 0.7rem; font-weight: 600; }
+  </style>
+</head>
+<body data-theme="default">
+
+<div class="app">
+  <header>
+    <h1 style="margin:0; font-size: 1.5rem;">Kassenbon Pro</h1>
+    <div id="sync-status">Lokaler Modus</div>
+    <div class="tabs">
+      <div class="tab active" onclick="showScreen('scan', this)">Scan</div>
+      <div class="tab" onclick="showScreen('list', this)">Historie</div>
+      <div class="tab" onclick="showScreen('settings', this)">Optionen</div>
+    </div>
+  </header>
+
+  <main>
+    <section id="s-scan" class="screen active">
+      <div class="card">
+        <input type="file" id="imgInp" accept="image/*,.pdf" multiple style="display:none">
+        <label for="imgInp" id="fileLabel" class="file-label">📸 BON WÄHLEN</label>
+        <div id="prog-cont" style="display:none; margin-top:20px;">
+          <div id="p-main" style="text-align:center; font-weight:700;">Verarbeite...</div>
+          <div class="progress-bg"><div id="p-fill" class="progress-fill"></div></div>
+        </div>
+      </div>
+      <div id="last-res"></div>
+    </section>
+
+    <section id="s-list" class="screen">
+      <div class="stats-grid-desktop">
+        <div id="budget-area"></div>
+        <div class="card" id="chart-card" style="display:none; text-align:center;">
+          <span class="filter-label">Kategorien Verteilung</span>
+          <div style="max-width: 200px; margin: 10px auto;">
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </div>
+        <div class="card">
+            <span class="filter-label">Zeitraum</span>
+            <div style="display: flex; gap: 10px; margin-bottom:15px;">
+                <input type="date" id="dateFrom" onchange="render()">
+                <input type="date" id="dateTo" onchange="render()">
+            </div>
+            
+            <span class="filter-label">Kategorien</span>
+            <div class="category-chips">
+                <div class="chip active" onclick="setCat('ALL', this)">Alle</div>
+                <div class="chip" onclick="setCat('Obst&Gemüse', this)">🍏 Obst/G.</div>
+                <div class="chip" onclick="setCat('Fleisch', this)">🥩 Fleisch</div>
+                <div class="chip" onclick="setCat('Fisch', this)">🐟 Fisch</div>
+                <div class="chip" onclick="setCat('Milchprodukte', this)">🥛 Milch</div>
+                <div class="chip" onclick="setCat('Gesundheit', this)">🏥 Gsd.</div>
+                <div class="chip" onclick="setCat('Drogerie', this)">🧴 Drog.</div>
+                <div class="chip" onclick="setCat('Haushalt', this)">🏠 Haus</div>
+                <div class="chip" onclick="setCat('Sonstiges', this)">📦 Sonst.</div>
+            </div>
+
+            <span class="filter-label">Märkte</span>
+            <div class="category-chips" id="market-chips"></div>
+
+            <div style="display:flex; justify-content:space-around; padding-top:15px; border-top:1px solid var(--border);">
+                <div style="text-align:center;"><small>Gesamt</small><br><b id="sum-val">0.00€</b></div>
+                <div style="text-align:center;"><small>Anzahl</small><br><b id="count-val">0</b></div>
+            </div>
+        </div>
+      </div>
+      
+      <button id="cloud-sync-btn" class="btn" style="background:#4285F4; display:none; margin-bottom:15px;" onclick="syncWithCloud()">☁️ Daten mit der Cloud synchronisieren</button>
+      
+      <button class="btn" style="background:#f43f5e; margin-bottom:15px;" onclick="exportPDF()">📄 PDF Report erstellen</button>
+
+      <button class="btn ai" onclick="runAiAnalyse()">✨ KI Spar-Analyse & Preis-Check</button>
+      <div id="ai-output"></div>
+      <div id="main-list" style="margin-top:20px;"></div>
+    </section>
+
+    <section id="s-settings" class="screen">
+      <div class="stats-grid-desktop">
+        <div class="card">
+          <h3>Design</h3>
+          <select id="themeSelect" onchange="changeTheme(this.value)">
+            <option value="default">Blau</option>
+            <option value="berry">Beere</option>
+            <option value="nature">Natur</option>
+            <option value="ocean">Ocean</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+        <div class="card">
+          <h3>Budget</h3>
+          <input type="number" id="budgetInput" placeholder="Limit in €" oninput="saveBudget(this.value)">
+        </div>
+      </div>
+      <div class="card">
+        <h3>Cloud Sync</h3>
+        <button id="login-btn" class="btn" style="background:#fff; color:#444; border:1px solid #ccc;" onclick="login()">Google Login</button>
+        <button id="logout-btn" class="btn" style="background:var(--danger); display:none;" onclick="logout()">Abmelden</button>
+      </div>
+      <button class="btn" style="background:var(--danger); opacity:0.5;" onclick="resetApp()">Daten löschen</button>
+    </section>
+  </main>
+</div>
+
+<script>
+const API_KEY = "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";
+const DB_KEY = "receipts_v12_final";
+const CLIENT_ID = '874809033702-5n2klkcs50hs8ugamgqvq8irfjfare3g.apps.googleusercontent.com';
+let currentCat = "ALL";
+let currentShop = "ALL";
+let myChart = null; // Für das Donut Chart
+
+function changeTheme(theme) {
+  document.body.setAttribute('data-theme', theme);
+  localStorage.setItem('app_theme', theme);
+}
+
+function showScreen(id, el) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('s-' + id).classList.add('active');
+  el.classList.add('active');
+  render();
+}
+
+function login() {
+  try {
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/drive.appdata',
+      callback: (resp) => {
+        if (resp.access_token) {
+          localStorage.setItem('google_token', resp.access_token);
+          location.reload();
+        }
+      }
+    });
+    client.requestAccessToken();
+  } catch (e) { alert("Google Dienst nicht bereit."); }
+}
+
+function logout() { localStorage.removeItem('google_token'); location.reload(); }
+
+const fInp = document.getElementById('imgInp');
+fInp.addEventListener('change', async (e) => {
+  if(e.target.files.length > 0) {
+    await handleFiles(e.target.files);
+    fInp.value = ""; 
+  }
+});
+
+async function handleFiles(files) {
+  document.getElementById('prog-cont').style.display = "block";
+  let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+  for(let i=0; i<files.length; i++) {
+    document.getElementById('p-fill').style.width = ((i+1)/files.length*100) + "%";
+    try {
+      const res = await processFile(files[i]);
+      db.push({...res, id: Date.now()+i, date: new Date().toISOString().split('T')[0]});
+      localStorage.setItem(DB_KEY, JSON.stringify(db));
+    } catch(e) { console.error(e); }
+  }
+  render();
+  setTimeout(() => { document.getElementById('prog-cont').style.display="none"; }, 2000);
+}
+
+async function processFile(file) {
+  let img = "";
+  if(file.type === "application/pdf") {
+    const pdf = await pdfjsLib.getDocument(await file.arrayBuffer()).promise;
+    const page = await pdf.getPage(1);
+    const canvas = document.createElement('canvas');
+    const viewport = page.getViewport({scale: 1.5});
+    canvas.height = viewport.height; canvas.width = viewport.width;
+    await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+    img = canvas.toDataURL('image/jpeg');
+  } else {
+    img = await new Promise(r => { const rd = new FileReader(); rd.onload=e=>r(e.target.result); rd.readAsDataURL(file); });
+  }
+  const worker = await Tesseract.createWorker("deu");
+  const { data } = await worker.recognize(img);
+  await worker.terminate();
+  const aiRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST", headers: {"Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json"},
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {role: "system", content: "Antworte NUR im JSON Format: {\"shop\":\"\",\"total\":0.0,\"items\":[{\"n\":\"\",\"p\":0.0,\"c\":\"Obst&Gemüse|Fleisch|Fisch|Gesundheit|Milchprodukte|Drogerie|Haushalt|Sonstiges\"}]}"},
+        {role: "user", content: data.text}
+      ]
+    })
+  });
+  const json = await aiRes.json();
+  const content = json.choices[0].message.content;
+  const match = content.match(/\{.*\}/s);
+  if (match && match[0]) { try { return JSON.parse(match[0]); } catch (e) {} }
+  return { shop: "Scan unklar", total: 0.0, items: [{n: "Bitte prüfen", p: 0.0, c: "Sonstiges"}] };
+}
+
+function setCat(cat, el) {
+  currentCat = cat;
+  el.parentNode.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+function setShop(shop, el) {
+  currentShop = shop;
+  el.parentNode.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+function render() {
+  const db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+  
+  const markets = [...new Set(db.map(r => r.shop))].filter(s => s && s !== "Scan unklar");
+  const mDiv = document.getElementById('market-chips');
+  mDiv.innerHTML = `<div class="chip ${currentShop === 'ALL' ? 'active' : ''}" onclick="setShop('ALL', this)">Alle</div>` + 
+    markets.map(m => `<div class="chip ${currentShop === m ? 'active' : ''}" onclick="setShop('${m}', this)">${m}</div>`).join('');
+
+  const dFrom = document.getElementById('dateFrom').value;
+  const dTo = document.getElementById('dateTo').value;
+  
+  const filtered = db.filter(r => {
+    const dateMatch = (!dFrom || r.date >= dFrom) && (!dTo || r.date <= dTo);
+    const catMatch = currentCat === "ALL" || r.items.some(i => i.c === currentCat);
+    const shopMatch = currentShop === "ALL" || r.shop === currentShop;
+    return dateMatch && catMatch && shopMatch;
+  });
+
+  const sum = filtered.reduce((s, r) => s + (parseFloat(r.total) || 0), 0);
+  document.getElementById('sum-val').textContent = sum.toFixed(2) + "€";
+  document.getElementById('count-val').textContent = filtered.length;
+  
+  const budget = parseFloat(localStorage.getItem('app_budget') || 0);
+  const bArea = document.getElementById('budget-area');
+  if(budget > 0) {
+    const perc = Math.min((sum/budget)*100, 100);
+    bArea.innerHTML = `<div class="card"><b>Budget:</b> ${sum.toFixed(2)}€ / ${budget}€<div class="progress-bg"><div class="progress-fill" style="width:${perc}%; background:${perc > 90 ? 'var(--danger)' : 'var(--success)'}"></div></div></div>`;
+  } else { bArea.innerHTML = ""; }
+
+  // Update Donut Chart
+  updateChart(filtered);
+
+  document.getElementById('main-list').innerHTML = filtered.slice().reverse().map(r => `
+    <div class="receipt-item">
+      <div style="display:flex; justify-content:space-between; align-items:center;" onclick="this.nextElementSibling.classList.toggle('open')">
+        <span><b>${r.shop}</b><br><small>${r.date}</small></span>
+        <b style="color:var(--primary)">${(r.total || 0).toFixed(2)}€</b>
+      </div>
+      <div class="details">
+        ${(r.items || []).map(i => `
+          <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:0.9rem;">
+            <span>${i.n} <span class="cat-badge">${i.c}</span></span>
+            <span style="font-weight:600;">${(i.p || 0).toFixed(2)}€</span>
+          </div>
+        `).join('')}
+        <button onclick="deleteItem(${r.id})" style="color:var(--danger); background:none; border:none; margin-top:15px; cursor:pointer; width:100%; text-align:right; font-size:0.8rem; font-weight:700;">LÖSCHEN</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// NEUE FUNKTION: Chart Update
+function updateChart(data) {
+  const chartCard = document.getElementById('chart-card');
+  if(!data.length) { chartCard.style.display="none"; return; }
+  chartCard.style.display="block";
+
+  const cats = {};
+  data.forEach(r => r.items.forEach(i => {
+    cats[i.c] = (cats[i.c] || 0) + i.p;
+  }));
+
+  const ctx = document.getElementById('categoryChart').getContext('2d');
+  if(myChart) myChart.destroy();
+  myChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(cats),
+      datasets: [{
+        data: Object.values(cats),
+        backgroundColor: ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'],
+        borderWidth: 0
+      }]
+    },
+    options: { plugins: { legend: { display: false } }, cutout: '70%' }
+  });
+}
+
+// NEUE FUNKTION: PDF Export
+async function exportPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+  
+  doc.setFontSize(20);
+  doc.text("Kassenbon Pro - Report", 14, 22);
+  doc.setFontSize(11);
+  doc.text(`Erstellt am: ${new Date().toLocaleDateString()}`, 14, 30);
+
+  const tableData = [];
+  db.forEach(r => {
+    r.items.forEach(i => {
+      tableData.push([r.date, r.shop, i.n, i.c, i.p.toFixed(2) + " €"]);
+    });
+  });
+
+  doc.autoTable({
+    startY: 40,
+    head: [['Datum', 'Laden', 'Produkt', 'Kategorie', 'Preis']],
+    body: tableData,
+    theme: 'striped'
+  });
+
+  doc.save(`Kassenbon_Report_${Date.now()}.pdf`);
+}
+
+// ERWEITERTE FUNKTION: KI Analyse mit internem Preisvergleich
+async function runAiAnalyse() {
+  const db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+  if(!db.length) return;
+  document.getElementById('ai-output').innerHTML = "<div class='card'>KI analysiert Preise...</div>";
+  
+  // Interner Preis-Check Logik
+  const priceCheck = {};
+  db.forEach(r => {
+    r.items.forEach(i => {
+      const name = i.n.toLowerCase();
+      if(!priceCheck[name] || i.p < priceCheck[name].p) {
+        priceCheck[name] = { p: i.p, s: r.shop };
+      }
+    });
+  });
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST", headers: {"Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json"},
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages: [{role: "user", content: `Analysiere diese Käufe: ${JSON.stringify(db.slice(-5))}. 
+      Zusätzlich hier die Bestpreise aus meiner Historie: ${JSON.stringify(priceCheck)}. 
+      Gib 2 kurze Tipps und weise mich auf ein Produkt hin, das ich schonmal günstiger bei einem anderen Laden gekauft habe.`}]
+    })
+  });
+  const data = await res.json();
+  document.getElementById('ai-output').innerHTML = `<div class="card" style="background:rgba(168, 85, 247, 0.1); border:1px solid #a855f7;">${data.choices[0].message.content}</div>`;
+}
+
+async function syncWithCloud() {
+  const token = localStorage.getItem('google_token');
+  if(!token) return;
+  const statusEl = document.getElementById('sync-status');
+  const btn = document.getElementById('cloud-sync-btn');
+  const originalBtnText = btn.textContent;
+  
+  try {
+    btn.textContent = "⏳ Synchronisiere...";
+    statusEl.textContent = "⏳ Sync läuft...";
+    
+    const searchRes = await fetch("https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name='receipts.json'", {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    const searchData = await searchRes.json();
+    const fileId = searchData.files.length > 0 ? searchData.files[0].id : null;
+    const localData = localStorage.getItem(DB_KEY) || "[]";
+
+    if (fileId) {
+      const downloadRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const cloudData = await downloadRes.json();
+      const localParsed = JSON.parse(localData);
+      const merged = [...cloudData];
+      localParsed.forEach(lItem => {
+        if(!merged.find(mItem => mItem.id === lItem.id)) merged.push(lItem);
+      });
+      localStorage.setItem(DB_KEY, JSON.stringify(merged));
+      await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+        method: "PATCH",
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(merged)
+      });
+    } else {
+      const metadata = { name: 'receipts.json', parents: ['appDataFolder'] };
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file', new Blob([localData], { type: 'application/json' }));
+      await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+        method: "POST", headers: { "Authorization": `Bearer ${token}` }, body: form
+      });
+    }
+    statusEl.textContent = "✅ Sync Abgeschlossen";
+    render();
+  } catch (e) {
+    statusEl.textContent = "❌ Sync Fehler";
+  } finally {
+    btn.textContent = originalBtnText;
+    setTimeout(() => { statusEl.textContent = "✅ Cloud Aktiv"; }, 3000);
+  }
+}
+
+function saveBudget(v) { localStorage.setItem('app_budget', v); render(); }
+function deleteItem(id) {
+  let db = JSON.parse(localStorage.getItem(DB_KEY) || "[]");
+  localStorage.setItem(DB_KEY, JSON.stringify(db.filter(r => r.id !== id)));
+  render();
+}
+function resetApp() { if(confirm("Alles löschen?")) { localStorage.clear(); location.reload(); } }
+
+window.onload = () => {
+  changeTheme(localStorage.getItem('app_theme') || 'default');
+  document.getElementById('themeSelect').value = localStorage.getItem('app_theme') || 'default';
+  document.getElementById('budgetInput').value = localStorage.getItem('app_budget') || "";
+  render();
+  if(localStorage.getItem('google_token')) {
+    document.getElementById('login-btn').style.display = 'none';
+    document.getElementById('logout-btn').style.display = 'block';
+    document.getElementById('sync-status').textContent = "✅ Cloud Aktiv";
+    document.getElementById('cloud-sync-btn').style.display = 'block';
+  }
+};
+</script>
+</body>
+</html>
